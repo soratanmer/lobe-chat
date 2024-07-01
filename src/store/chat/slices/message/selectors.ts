@@ -1,10 +1,10 @@
-import { LobePluginType } from '@lobehub/chat-plugin-sdk';
 import { t } from 'i18next';
 
 import { DEFAULT_INBOX_AVATAR, DEFAULT_USER_AVATAR } from '@/const/meta';
 import { INBOX_SESSION_ID } from '@/const/session';
 import { useAgentStore } from '@/store/agent';
 import { agentSelectors } from '@/store/agent/selectors';
+import { messageMapKey } from '@/store/chat/slices/message/utils';
 import { useSessionStore } from '@/store/session';
 import { sessionMetaSelectors } from '@/store/session/selectors';
 import { useUserStore } from '@/store/user';
@@ -28,27 +28,27 @@ const getMeta = (message: ChatMessage) => {
       return message.meta;
     }
 
-    case 'assistant': {
+    default: {
       return sessionMetaSelectors.currentAgentMeta(useSessionStore.getState());
-    }
-
-    case 'function': {
-      // TODO: 后续改成将 plugin metadata 写入 message metadata 的方案
-      return {
-        avatar: '🧩',
-        title: 'plugin-unknown',
-      };
     }
   }
 };
 
-const currentChatKey = (s: ChatStore) => `${s.activeId}_${s.activeTopicId}`;
+const currentChatKey = (s: ChatStore) => messageMapKey(s.activeId, s.activeTopicId);
 
 // 当前激活的消息列表
 const currentChats = (s: ChatStore): ChatMessage[] => {
   if (!s.activeId) return [];
 
-  return s.messages.map((i) => ({ ...i, meta: getMeta(i) }));
+  const messages = s.messagesMap[currentChatKey(s)] || [];
+
+  return messages.map((i) => ({ ...i, meta: getMeta(i) }));
+};
+
+const currentToolMessages = (s: ChatStore) => {
+  const messages = currentChats(s);
+
+  return messages.filter((m) => m.role === 'tool');
 };
 
 const initTime = Date.now();
@@ -56,8 +56,10 @@ const initTime = Date.now();
 const showInboxWelcome = (s: ChatStore): boolean => {
   const isInbox = s.activeId === INBOX_SESSION_ID;
   if (!isInbox) return false;
+
   const data = currentChats(s);
   const isBrandNewChat = data.length === 0;
+
   return isBrandNewChat;
 };
 
@@ -106,7 +108,7 @@ const currentChatIDsWithGuideMessage = (s: ChatStore) => {
 
 const currentChatsWithHistoryConfig = (s: ChatStore): ChatMessage[] => {
   const chats = currentChats(s);
-  const config = agentSelectors.currentAgentConfig(useAgentStore.getState());
+  const config = agentSelectors.currentAgentChatConfig(useAgentStore.getState());
 
   return chatHelpers.getSlicedMessagesWithConfig(chats, config);
 };
@@ -116,23 +118,33 @@ const chatsMessageString = (s: ChatStore): string => {
   return chats.map((m) => m.content).join('');
 };
 
-const getFunctionMessageProps =
-  ({ plugin, content, id }: Pick<ChatMessage, 'plugin' | 'content' | 'id'>) =>
-  (s: ChatStore) => ({
-    arguments: plugin?.arguments,
-    command: plugin,
-    content,
-    id: plugin?.identifier,
-    loading: id === s.chatLoadingId,
-    type: plugin?.type as LobePluginType,
-  });
+const getMessageById = (id: string) => (s: ChatStore) =>
+  chatHelpers.getMessageById(currentChats(s), id);
 
-const getMessageById = (id: string) => (s: ChatStore) => chatHelpers.getMessageById(s.messages, id);
 const getTraceIdByMessageId = (id: string) => (s: ChatStore) => getMessageById(id)(s)?.traceId;
 
 const latestMessage = (s: ChatStore) => currentChats(s).at(-1);
 
 const currentChatLoadingState = (s: ChatStore) => !s.messagesInit;
+
+const isCurrentChatLoaded = (s: ChatStore) => !!s.messagesMap[currentChatKey(s)];
+
+const isMessageEditing = (id: string) => (s: ChatStore) => s.messageEditingIds.includes(id);
+const isMessageLoading = (id: string) => (s: ChatStore) => s.messageLoadingIds.includes(id);
+const isHasMessageLoading = (s: ChatStore) => s.messageLoadingIds.length > 0;
+const isCreatingMessage = (s: ChatStore) => s.isCreatingMessage;
+
+const isMessageGenerating = (id: string) => (s: ChatStore) => s.chatLoadingIds.includes(id);
+const isPluginApiInvoking = (id: string) => (s: ChatStore) => s.pluginApiLoadingIds.includes(id);
+
+const isToolCallStreaming = (id: string, index: number) => (s: ChatStore) => {
+  const isLoading = s.toolCallingStreamIds[id];
+
+  if (!isLoading) return false;
+
+  return isLoading[index];
+};
+const isAIGenerating = (s: ChatStore) => s.chatLoadingIds.length > 0;
 
 export const chatSelectors = {
   chatsMessageString,
@@ -142,9 +154,18 @@ export const chatSelectors = {
   currentChats,
   currentChatsWithGuideMessage,
   currentChatsWithHistoryConfig,
-  getFunctionMessageProps,
+  currentToolMessages,
   getMessageById,
   getTraceIdByMessageId,
+  isAIGenerating,
+  isCreatingMessage,
+  isCurrentChatLoaded,
+  isHasMessageLoading,
+  isMessageEditing,
+  isMessageGenerating,
+  isMessageLoading,
+  isPluginApiInvoking,
+  isToolCallStreaming,
   latestMessage,
   showInboxWelcome,
 };

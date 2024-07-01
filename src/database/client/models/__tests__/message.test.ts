@@ -264,14 +264,14 @@ describe('MessageModel', () => {
     it('should update a role and plugins', async () => {
       const createdMessage = await MessageModel.create(messageData);
       const updateData = {
-        role: 'function' as const,
+        role: 'tool' as const,
         plugin: { apiName: 'a', identifier: 'b', arguments: 'abc' },
       };
 
       await MessageModel.update(createdMessage.id, updateData);
       const updatedMessage = await MessageModel.findById(createdMessage.id);
 
-      expect(updatedMessage).toHaveProperty('role', 'function');
+      expect(updatedMessage).toHaveProperty('role', 'tool');
     });
   });
 
@@ -385,26 +385,23 @@ describe('MessageModel', () => {
   describe('updatePluginState', () => {
     it('should update plugin state', async () => {
       const createdMessage = await MessageModel.create(messageData);
-      await MessageModel.updatePluginState(createdMessage.id, 'testKey', 'testValue');
+      await MessageModel.updatePluginState(createdMessage.id, { testKey: 'testValue' });
       const updatedMessage = await MessageModel.findById(createdMessage.id);
       expect(updatedMessage.pluginState).toHaveProperty('testKey', 'testValue');
-    });
-  });
-  describe('clearTable', () => {
-    it('should clear the table', async () => {
-      await MessageModel.create(messageData);
-      await MessageModel.clearTable();
-      const messages = await MessageModel.queryAll();
-      expect(messages).toHaveLength(0);
     });
   });
 
-  describe('updatePluginState', () => {
-    it('should update plugin state', async () => {
+  describe('updatePlugin', () => {
+    it('should update plugin', async () => {
+      const value = {
+        identifier: 'testValue',
+        arguments: 'abc',
+        apiName: 'abc',
+      };
       const createdMessage = await MessageModel.create(messageData);
-      await MessageModel.updatePluginState(createdMessage.id, 'testKey', 'testValue');
+      await MessageModel.updatePlugin(createdMessage.id, value);
       const updatedMessage = await MessageModel.findById(createdMessage.id);
-      expect(updatedMessage.pluginState).toHaveProperty('testKey', 'testValue');
+      expect(updatedMessage.plugin).toEqual(value);
     });
   });
 

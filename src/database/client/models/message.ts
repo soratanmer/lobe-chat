@@ -55,7 +55,7 @@ class _MessageModel extends BaseModel {
     const finalList: ChatMessage[] = [];
 
     const addItem = (item: ChatMessage) => {
-      const isExist = finalList.findIndex((i) => item.id === i.id) > -1;
+      const isExist = finalList.some((i) => item.id === i.id);
       if (!isExist) {
         finalList.push(item);
       }
@@ -184,10 +184,16 @@ class _MessageModel extends BaseModel {
     return super._updateWithSync(id, data);
   }
 
-  async updatePluginState(id: string, key: string, value: any) {
+  async updatePluginState(id: string, value: any) {
     const item = await this.findById(id);
 
-    return this.update(id, { pluginState: { ...item.pluginState, [key]: value } });
+    return this.update(id, { pluginState: { ...item.pluginState, ...value } });
+  }
+
+  async updatePlugin(id: string, value: any) {
+    const item = await this.findById(id);
+
+    return this.update(id, { plugin: { ...item.plugin, ...value } });
   }
 
   /**
